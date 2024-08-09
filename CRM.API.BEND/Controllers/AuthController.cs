@@ -292,15 +292,6 @@ public class AuthController : ControllerBase
         try
         {
             var user = await _userManager.FindByEmailAsync(model.Email!);
-            if (user != null && await _userManager.CheckPasswordAsync(user, model.Password!))
-            {
-                var tokenResponse = await GenerateTokenResponse(user);
-                if (tokenResponse.UserInfo.Roles.Contains("AdminMaster"))
-                {
-                    return Ok(tokenResponse);
-                }
-            }
-
             var authService = new TokenService();
             var accessToken = await authService.AcquireTokenByUsernamePasswordAsync(model.Email, model.Password, _configuration["AzureAD:ClientId"], _configuration["AzureAD:TenantId"], _configuration["AzureAD:scopes"]);
 
@@ -311,17 +302,30 @@ public class AuthController : ControllerBase
                 var jwtSecurityToken = handler.ReadJwtToken(token);
 
                 var objectId = jwtSecurityToken.Claims.First(claim => claim.Type == "oid").Value;
+                var isAdminCRM = jwtSecurityToken.Claims.Any(claim => claim.Type == "roles" && claim.Value == _configuration["AzureAD:Role"]);
 
-                user = await EnsureUserExists(user, model.Email!, model.Password!, objectId);
+                if (!isAdminCRM)
+                    return Unauthorized("Role de Usuário Inválida.");
+
+                if (user == null)
+                    user = await EnsureUserExists(user, model.Email!, model.Password!, objectId);
 
                 var tokenResponse = await GenerateTokenResponse(user);
                 return Ok(tokenResponse);
             }
-
-            return Ok(new
+            else
             {
-                AccessToken = accessToken
-            });
+                if (user != null && await _userManager.CheckPasswordAsync(user, model.Password!))
+                {
+                    var tokenResponse = await GenerateTokenResponse(user);
+                    if (tokenResponse.UserInfo.Roles.Contains("AdminMaster"))
+                    {
+                        return Ok(tokenResponse);
+                    }
+                }
+            }
+
+            return Unauthorized();
         }
         catch (MsalUiRequiredException)
         {
