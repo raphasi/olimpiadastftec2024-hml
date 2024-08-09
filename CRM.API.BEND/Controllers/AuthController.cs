@@ -302,6 +302,10 @@ public class AuthController : ControllerBase
                 var jwtSecurityToken = handler.ReadJwtToken(token);
 
                 var objectId = jwtSecurityToken.Claims.First(claim => claim.Type == "oid").Value;
+                var isAdminCRM = jwtSecurityToken.Claims.Any(claim => claim.Type == "roles" && claim.Value == _configuration["AzureAD:Role"]);
+
+                if (!isAdminCRM)
+                    return Unauthorized("Role de Usuário Inválida.");
 
                 if (user == null)
                     user = await EnsureUserExists(user, model.Email!, model.Password!, objectId);
